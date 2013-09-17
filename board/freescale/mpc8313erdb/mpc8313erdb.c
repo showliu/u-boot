@@ -3,23 +3,7 @@
  *
  * Author: Scott Wood <scottwood@freescale.com>
  *
- * See file CREDITS for list of people who contributed to this
- * project.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS for A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
- * MA 02111-1307 USA
+ * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
@@ -31,7 +15,7 @@
 #include <vsc7385.h>
 #include <ns16550.h>
 #include <nand.h>
-#if defined(CONFIG_MPC83XX_GPIO) && !defined(CONFIG_NAND_SPL)
+#if defined(CONFIG_MPC83XX_GPIO) && !defined(CONFIG_SPL_BUILD)
 #include <asm/gpio.h>
 #endif
 
@@ -45,7 +29,7 @@ int board_early_init_f(void)
 	if (im->pmc.pmccr1 & PMCCR1_POWER_OFF)
 		gd->flags |= GD_FLG_SILENT;
 #endif
-#if defined(CONFIG_MPC83XX_GPIO) && !defined(CONFIG_NAND_SPL)
+#if defined(CONFIG_MPC83XX_GPIO) && !defined(CONFIG_SPL_BUILD)
 	mpc83xx_gpio_init_f();
 #endif
 
@@ -54,7 +38,7 @@ int board_early_init_f(void)
 
 int board_early_init_r(void)
 {
-#if defined(CONFIG_MPC83XX_GPIO) && !defined(CONFIG_NAND_SPL)
+#if defined(CONFIG_MPC83XX_GPIO) && !defined(CONFIG_SPL_BUILD)
 	mpc83xx_gpio_init_r();
 #endif
 
@@ -67,7 +51,7 @@ int checkboard(void)
 	return 0;
 }
 
-#ifndef CONFIG_NAND_SPL
+#ifndef CONFIG_SPL_BUILD
 static struct pci_region pci_regions[] = {
 	{
 		.bus_start = CONFIG_SYS_PCI1_MEM_BASE,
@@ -140,7 +124,7 @@ void ft_board_setup(void *blob, bd_t *bd)
 #endif
 }
 #endif
-#else /* CONFIG_NAND_SPL */
+#else /* CONFIG_SPL_BUILD */
 void board_init_f(ulong bootflag)
 {
 	board_early_init_f();

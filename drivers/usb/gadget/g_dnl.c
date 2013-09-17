@@ -4,19 +4,7 @@
  * Copyright (C) 2012 Samsung Electronics
  * Lukasz Majewski  <l.majewski@samsung.com>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <errno.h>
@@ -31,6 +19,7 @@
 
 #include "gadget_chips.h"
 #include "composite.c"
+#include "f_mass_storage.c"
 
 /*
  * One needs to define the following:
@@ -42,8 +31,10 @@
 
 #define STRING_MANUFACTURER 25
 #define STRING_PRODUCT 2
+/* Index of String Descriptor describing this configuration */
 #define STRING_USBDOWN 2
-#define CONFIG_USBDOWNLOADER 2
+/* Number of supported configurations */
+#define CONFIGURATION_NUMBER 1
 
 #define DRIVER_VERSION		"usb_dnl 2.0"
 
@@ -65,10 +56,14 @@ static struct usb_device_descriptor device_desc = {
 	.bNumConfigurations = 1,
 };
 
-/* static strings, in UTF-8 */
+/*
+ * static strings, in UTF-8
+ * IDs for those strings are assigned dynamically at g_dnl_bind()
+ */
 static struct usb_string g_dnl_string_defs[] = {
-	{ 0, manufacturer, },
-	{ 1, product, },
+	{.s = manufacturer},
+	{.s = product},
+	{ }		/* end of list */
 };
 
 static struct usb_gadget_strings g_dnl_string_tab = {
@@ -83,7 +78,12 @@ static struct usb_gadget_strings *g_dnl_composite_strings[] = {
 
 static int g_dnl_unbind(struct usb_composite_dev *cdev)
 {
-	debug("%s\n", __func__);
+	struct usb_gadget *gadget = cdev->gadget;
+
+	debug("%s: calling usb_gadget_disconnect for "
+			"controller '%s'\n", shortname, gadget->name);
+	usb_gadget_disconnect(gadget);
+
 	return 0;
 }
 
@@ -98,6 +98,8 @@ static int g_dnl_do_config(struct usb_configuration *c)
 	printf("GADGET DRIVER: %s\n", s);
 	if (!strcmp(s, "usb_dnl_dfu"))
 		ret = dfu_add(c);
+	else if (!strcmp(s, "usb_dnl_ums"))
+		ret = fsg_add(c);
 
 	return ret;
 }
@@ -107,13 +109,19 @@ static int g_dnl_config_register(struct usb_composite_dev *cdev)
 	static struct usb_configuration config = {
 		.label = "usb_dnload",
 		.bmAttributes =	USB_CONFIG_ATT_ONE | USB_CONFIG_ATT_SELFPOWER,
-		.bConfigurationValue =	CONFIG_USBDOWNLOADER,
+		.bConfigurationValue =	CONFIGURATION_NUMBER,
 		.iConfiguration =	STRING_USBDOWN,
 
 		.bind = g_dnl_do_config,
 	};
 
 	return usb_add_config(cdev, &config);
+}
+
+__weak
+int g_dnl_bind_fixup(struct usb_device_descriptor *dev)
+{
+	return 0;
 }
 
 static int g_dnl_bind(struct usb_composite_dev *cdev)
@@ -138,6 +146,7 @@ static int g_dnl_bind(struct usb_composite_dev *cdev)
 	g_dnl_string_defs[1].id = id;
 	device_desc.iProduct = id;
 
+	g_dnl_bind_fixup(&device_desc);
 	ret = g_dnl_config_register(cdev);
 	if (ret)
 		goto error;
@@ -152,6 +161,10 @@ static int g_dnl_bind(struct usb_composite_dev *cdev)
 			shortname, gadget->name);
 		device_desc.bcdDevice = __constant_cpu_to_le16(0x9999);
 	}
+
+	debug("%s: calling usb_gadget_connect for "
+			"controller '%s'\n", shortname, gadget->name);
+	usb_gadget_connect(gadget);
 
 	return 0;
 
@@ -176,6 +189,9 @@ int g_dnl_register(const char *type)
 	int ret;
 
 	if (!strcmp(type, "dfu")) {
+		strcpy(name, shortname);
+		strcat(name, type);
+	} else if (!strcmp(type, "ums")) {
 		strcpy(name, shortname);
 		strcat(name, type);
 	} else {

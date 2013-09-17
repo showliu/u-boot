@@ -5,19 +5,7 @@
  * Copyright (c) 2008 - 2012 Nobuhiro Iwamatsu
  * Copyright (c) 2007 Carlos Munoz <carlos@kenati.com>
  *
- * This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <netdev.h>
@@ -288,7 +276,7 @@ static const u16 sh_eth_offset_fast_sh4[SH_ETH_MAX_REGISTER_OFFSET] = {
 #if defined(CONFIG_CPU_SH7763) || defined(CONFIG_CPU_SH7734)
 #define SH_ETH_TYPE_GETHER
 #define BASE_IO_ADDR	0xfee00000
-#elif defined(CONFIG_CPU_SH7757)
+#elif defined(CONFIG_CPU_SH7757) || defined(CONFIG_CPU_SH7752)
 #if defined(CONFIG_SH_ETHER_USE_GETHER)
 #define SH_ETH_TYPE_GETHER
 #define BASE_IO_ADDR	0xfee00000
@@ -346,7 +334,7 @@ enum DMAC_T_BIT {
 
 /* GECMR */
 enum GECMR_BIT {
-#if defined(CONFIG_CPU_SH7757)
+#if defined(CONFIG_CPU_SH7757) || defined(CONFIG_CPU_SH7752)
 	GECMR_1000B = 0x20, GECMR_100B = 0x01, GECMR_10B = 0x00,
 #else
 	GECMR_1000B = 0x01, GECMR_100B = 0x04, GECMR_10B = 0x00,

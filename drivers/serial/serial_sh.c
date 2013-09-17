@@ -3,19 +3,7 @@
  * Copyright (C) 2007,2008,2010 Nobuhiro Iwamatsu
  * Copyright (C) 2002 - 2008  Paul Mundt
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
@@ -117,6 +105,14 @@ static int serial_rx_fifo_level(void)
 	return scif_rxfill(&sh_sci);
 }
 
+static void handle_error(void)
+{
+	sci_in(&sh_sci, SCxSR);
+	sci_out(&sh_sci, SCxSR, SCxSR_ERROR_CLEAR(&sh_sci));
+	sci_in(&sh_sci, SCLSR);
+	sci_out(&sh_sci, SCLSR, 0x00);
+}
+
 void serial_raw_putc(const char c)
 {
 	while (1) {
@@ -138,16 +134,14 @@ static void sh_serial_putc(const char c)
 
 static int sh_serial_tstc(void)
 {
+	if (sci_in(&sh_sci, SCxSR) & SCIF_ERRORS) {
+		handle_error();
+		return 0;
+	}
+
 	return serial_rx_fifo_level() ? 1 : 0;
 }
 
-void handle_error(void)
-{
-	sci_in(&sh_sci, SCxSR);
-	sci_out(&sh_sci, SCxSR, SCxSR_ERROR_CLEAR(&sh_sci));
-	sci_in(&sh_sci, SCLSR);
-	sci_out(&sh_sci, SCLSR, 0x00);
-}
 
 int serial_getc_check(void)
 {

@@ -3,29 +3,15 @@
  *
  * Configuation settings for the AT91SAM9X5EK board.
  *
- * See file CREDITS for list of people who contributed to this
- * project.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
- * MA 02111-1307 USA
+ * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #ifndef __CONFIG_H__
 #define __CONFIG_H__
 
 #include <asm/hardware.h>
+
+#define CONFIG_SYS_TEXT_BASE		0x26f00000
 
 /* ARM asynchronous clock */
 #define CONFIG_SYS_AT91_SLOW_CLOCK	32768
@@ -42,6 +28,7 @@
 #define CONFIG_BOARD_EARLY_INIT_F
 #define CONFIG_DISPLAY_CPUINFO
 
+#define CONFIG_CMD_BOOTZ
 #define CONFIG_OF_LIBFDT
 
 /* general purpose I/O */
@@ -90,6 +77,14 @@
 #define CONFIG_CMD_NAND
 #define CONFIG_CMD_SF
 #define CONFIG_CMD_MMC
+#define CONFIG_CMD_FAT
+#define CONFIG_CMD_USB
+
+/*
+ * define CONFIG_USB_EHCI to enable USB Hi-Speed (aka 2.0)
+ * NB: in this case, USB 1.1 devices won't be recognized.
+ */
+
 
 /* SDRAM */
 #define CONFIG_NR_DRAM_BANKS		1
@@ -128,7 +123,8 @@
 #define CONFIG_ATMEL_NAND_HW_PMECC	1
 #define CONFIG_PMECC_CAP		2
 #define CONFIG_PMECC_SECTOR_SIZE	512
-#define CONFIG_PMECC_INDEX_TABLE_OFFSET	0x8000
+
+#define CONFIG_CMD_NAND_TRIMFFS
 
 #define CONFIG_MTD_DEVICE
 #define CONFIG_CMD_MTDPARTS
@@ -142,9 +138,12 @@
 /* MMC */
 #ifdef CONFIG_CMD_MMC
 #define CONFIG_MMC
-#define CONFIG_CMD_FAT
 #define CONFIG_GENERIC_MMC
 #define CONFIG_GENERIC_ATMEL_MCI
+#endif
+
+/* FAT */
+#ifdef CONFIG_CMD_FAT
 #define CONFIG_DOS_PARTITION
 #endif
 
@@ -153,6 +152,22 @@
 #define CONFIG_RMII
 #define CONFIG_NET_RETRY_COUNT		20
 #define CONFIG_MACB_SEARCH_PHY
+
+/* USB */
+#ifdef CONFIG_CMD_USB
+#ifdef CONFIG_USB_EHCI
+#define CONFIG_USB_EHCI_ATMEL
+#define CONFIG_SYS_USB_EHCI_MAX_ROOT_PORTS	2
+#else
+#define CONFIG_USB_OHCI_NEW
+#define CONFIG_SYS_USB_OHCI_CPU_INIT
+#define CONFIG_SYS_USB_OHCI_REGS_BASE		ATMEL_BASE_OHCI
+#define CONFIG_SYS_USB_OHCI_SLOT_NAME		"at91sam9x5"
+#define CONFIG_SYS_USB_OHCI_MAX_ROOT_PORTS	3
+#endif
+#define CONFIG_USB_ATMEL
+#define CONFIG_USB_STORAGE
+#endif
 
 #define CONFIG_SYS_LOAD_ADDR		0x22000000	/* load address */
 
@@ -178,6 +193,16 @@
 #define CONFIG_BOOTCOMMAND	"sf probe 0; " \
 				"sf read 0x22000000 0x100000 0x300000; " \
 				"bootm 0x22000000"
+#elif defined(CONFIG_SYS_USE_DATAFLASH)
+/* bootstrap + u-boot + env + linux in data flash */
+#define CONFIG_ENV_IS_IN_SPI_FLASH
+#define CONFIG_ENV_OFFSET	0x4200
+#define CONFIG_ENV_SIZE		0x4200
+#define CONFIG_ENV_SECT_SIZE	0x210
+#define CONFIG_ENV_SPI_MAX_HZ	30000000
+#define CONFIG_BOOTCOMMAND	"sf probe 0; " \
+				"sf read 0x22000000 0x84000 0x294000; " \
+				"bootm 0x22000000"
 #else /* CONFIG_SYS_USE_MMC */
 /* bootstrap + u-boot + env + linux in mmc */
 #define CONFIG_ENV_IS_IN_MMC
@@ -194,11 +219,12 @@
 				"root=/dev/mmcblk0p2 " \
 				"rw rootfstype=ext4 rootwait"
 #else
-#define CONFIG_BOOTARGS		"mem=128M console=ttyS0,115200 " \
-				"mtdparts=atmel_nand:" \
-				"8M(bootstrap/uboot/kernel)ro,-(rootfs) " \
-				"root=/dev/mtdblock1 rw " \
-				"rootfstype=ubifs ubi.mtd=1 root=ubi0:rootfs"
+#define CONFIG_BOOTARGS							\
+	"console=ttyS0,115200 earlyprintk "				\
+	"mtdparts=atmel_nand:256k(bootstrap)ro,512k(uboot)ro,"		\
+	"256k(env),256k(env_redundant),256k(spare),"			\
+	"512k(dtb),6M(kernel)ro,-(rootfs) "				\
+	"rootfstype=ubifs ubi.mtd=7 root=ubi0:rootfs rw"
 #endif
 
 #define CONFIG_BAUDRATE		115200

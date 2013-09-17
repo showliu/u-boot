@@ -15,6 +15,8 @@
 *.swp
 *.patch
 *.bin
+*.cfgtmp
+*.dts.tmp
 
 # Build tree
 /build-*
@@ -23,11 +25,14 @@
 # Top-level generic files
 #
 
-/MLO
+/MLO*
+/SPL
 /System.map
 /u-boot
 /u-boot.hex
 /u-boot.imx
+/u-boot-with-spl.imx
+/u-boot-with-nand-spl.imx
 /u-boot.map
 /u-boot.srec
 /u-boot.ldr
@@ -38,11 +43,11 @@
 /u-boot.sha1
 /u-boot.dis
 /u-boot.lds
-/u-boot.lst
 /u-boot.ubl
 /u-boot.ais
 /u-boot.dtb
 /u-boot.sb
+/u-boot.bd
 /u-boot.geany
 
 #
@@ -75,6 +80,12 @@ cscope.*
 /tags
 /ctags
 /etags
+
+# gnu global files
+GPATH
+GRTAGS
+GSYMS
+GTAGS
 
 # spl ais files
 /spl/*.ais

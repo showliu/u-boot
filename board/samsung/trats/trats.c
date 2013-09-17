@@ -4,23 +4,7 @@
  * Kyungmin Park <kyungmin.park@samsung.com>
  * Donghwa Lee <dh09.lee@samsung.com>
  *
- * See file CREDITS for list of people who contributed to this
- * project.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
- * MA 02111-1307 USA
+ * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
@@ -29,6 +13,7 @@
 #include <asm/arch/cpu.h>
 #include <asm/arch/gpio.h>
 #include <asm/arch/mmc.h>
+#include <asm/arch/pinmux.h>
 #include <asm/arch/clock.h>
 #include <asm/arch/clk.h>
 #include <asm/arch/mipi_dsim.h>
@@ -41,6 +26,7 @@
 #include <power/max8997_muic.h>
 #include <power/battery.h>
 #include <power/max17042_fg.h>
+#include <usb_mass_storage.h>
 
 #include "setup.h"
 
@@ -56,17 +42,11 @@ u32 get_board_rev(void)
 #endif
 
 static void check_hw_revision(void);
-
-static int hwrevision(int rev)
-{
-	return (board_rev & 0xf) == rev;
-}
-
 struct s3c_plat_otg_data s5pc210_otg_data;
 
 int board_init(void)
 {
-	gd->bd->bi_boot_params = PHYS_SDRAM_1 + 0x100;
+	gd->bd->bi_boot_params = CONFIG_SYS_SPL_ARGS_ADDR;
 
 	check_hw_revision();
 	printf("HW Revision:\t0x%x\n", board_rev);
@@ -81,10 +61,10 @@ void i2c_init_board(void)
 	struct exynos4_gpio_part2 *gpio2 =
 		(struct exynos4_gpio_part2 *)samsung_get_base_gpio_part2();
 
-	/* I2C_5 -> PMIC */
+	/* I2C_5 -> PMIC -> Adapter 0 */
 	s5p_gpio_direction_output(&gpio1->b, 7, 1);
 	s5p_gpio_direction_output(&gpio1->b, 6, 1);
-	/* I2C_9 -> FG */
+	/* I2C_9 -> FG -> Adapter 1 */
 	s5p_gpio_direction_output(&gpio2->y4, 0, 1);
 	s5p_gpio_direction_output(&gpio2->y4, 1, 1);
 }
@@ -302,10 +282,17 @@ int power_init_board(void)
 	struct power_battery *pb;
 	struct pmic *p_fg, *p_chrg, *p_muic, *p_bat;
 
-	ret = pmic_init(I2C_5);
+	/*
+	 * For PMIC/MUIC the I2C bus is named as I2C5, but it is connected
+	 * to logical I2C adapter 0
+	 *
+	 * The FUEL_GAUGE is marked as I2C9 on the schematic, but connected
+	 * to logical I2C adapter 1
+	 */
+	ret = pmic_init(I2C_0);
 	ret |= pmic_init_max8997();
-	ret |= power_fg_init(I2C_9);
-	ret |= power_muic_init(I2C_5);
+	ret |= power_fg_init(I2C_1);
+	ret |= power_muic_init(I2C_0);
 	ret |= power_bat_init(0);
 	if (ret)
 		return ret;
@@ -361,7 +348,9 @@ int power_init_board(void)
 int dram_init(void)
 {
 	gd->ram_size = get_ram_size((long *)PHYS_SDRAM_1, PHYS_SDRAM_1_SIZE) +
-		get_ram_size((long *)PHYS_SDRAM_2, PHYS_SDRAM_2_SIZE);
+		get_ram_size((long *)PHYS_SDRAM_2, PHYS_SDRAM_2_SIZE) +
+		get_ram_size((long *)PHYS_SDRAM_3, PHYS_SDRAM_3_SIZE) +
+		get_ram_size((long *)PHYS_SDRAM_4, PHYS_SDRAM_4_SIZE);
 
 	return 0;
 }
@@ -372,6 +361,10 @@ void dram_init_banksize(void)
 	gd->bd->bi_dram[0].size = PHYS_SDRAM_1_SIZE;
 	gd->bd->bi_dram[1].start = PHYS_SDRAM_2;
 	gd->bd->bi_dram[1].size = PHYS_SDRAM_2_SIZE;
+	gd->bd->bi_dram[2].start = PHYS_SDRAM_3;
+	gd->bd->bi_dram[2].size = PHYS_SDRAM_3_SIZE;
+	gd->bd->bi_dram[3].start = PHYS_SDRAM_4;
+	gd->bd->bi_dram[3].size = PHYS_SDRAM_4_SIZE;
 }
 
 static unsigned int get_hw_revision(void)
@@ -419,54 +412,22 @@ int board_mmc_init(bd_t *bis)
 {
 	struct exynos4_gpio_part2 *gpio =
 		(struct exynos4_gpio_part2 *)samsung_get_base_gpio_part2();
-	int i, err;
+	int err;
 
 	/* eMMC_EN: SD_0_CDn: GPK0[2] Output High */
 	s5p_gpio_direction_output(&gpio->k0, 2, 1);
 	s5p_gpio_set_pull(&gpio->k0, 2, GPIO_PULL_NONE);
 
 	/*
-	 * eMMC GPIO:
-	 * SDR 8-bit@48MHz at MMC0
-	 * GPK0[0]	SD_0_CLK(2)
-	 * GPK0[1]	SD_0_CMD(2)
-	 * GPK0[2]	SD_0_CDn	-> Not used
-	 * GPK0[3:6]	SD_0_DATA[0:3](2)
-	 * GPK1[3:6]	SD_0_DATA[0:3](3)
-	 *
-	 * DDR 4-bit@26MHz at MMC4
-	 * GPK0[0]	SD_4_CLK(3)
-	 * GPK0[1]	SD_4_CMD(3)
-	 * GPK0[2]	SD_4_CDn	-> Not used
-	 * GPK0[3:6]	SD_4_DATA[0:3](3)
-	 * GPK1[3:6]	SD_4_DATA[4:7](4)
-	 */
-	for (i = 0; i < 7; i++) {
-		if (i == 2)
-			continue;
-		/* GPK0[0:6] special function 2 */
-		s5p_gpio_cfg_pin(&gpio->k0, i, 0x2);
-		/* GPK0[0:6] pull disable */
-		s5p_gpio_set_pull(&gpio->k0, i, GPIO_PULL_NONE);
-		/* GPK0[0:6] drv 4x */
-		s5p_gpio_set_drv(&gpio->k0, i, GPIO_DRV_4X);
-	}
-
-	for (i = 3; i < 7; i++) {
-		/* GPK1[3:6] special function 3 */
-		s5p_gpio_cfg_pin(&gpio->k1, i, 0x3);
-		/* GPK1[3:6] pull disable */
-		s5p_gpio_set_pull(&gpio->k1, i, GPIO_PULL_NONE);
-		/* GPK1[3:6] drv 4x */
-		s5p_gpio_set_drv(&gpio->k1, i, GPIO_DRV_4X);
-	}
-
-	/*
 	 * MMC device init
 	 * mmc0	 : eMMC (8-bit buswidth)
 	 * mmc2	 : SD card (4-bit buswidth)
 	 */
-	err = s5p_mmc_init(0, 8);
+	err = exynos_pinmux_config(PERIPH_ID_SDMMC0, PINMUX_FLAG_8BIT_MODE);
+	if (err)
+		debug("SDMMC0 not configured\n");
+	else
+		err = s5p_mmc_init(0, 8);
 
 	/* T-flash detect */
 	s5p_gpio_cfg_pin(&gpio->x3, 4, 0xf);
@@ -477,24 +438,11 @@ int board_mmc_init(bd_t *bis)
 	 * GPX3[4] T-flash detect pin
 	 */
 	if (!s5p_gpio_get_value(&gpio->x3, 4)) {
-		/*
-		 * SD card GPIO:
-		 * GPK2[0]	SD_2_CLK(2)
-		 * GPK2[1]	SD_2_CMD(2)
-		 * GPK2[2]	SD_2_CDn	-> Not used
-		 * GPK2[3:6]	SD_2_DATA[0:3](2)
-		 */
-		for (i = 0; i < 7; i++) {
-			if (i == 2)
-				continue;
-			/* GPK2[0:6] special function 2 */
-			s5p_gpio_cfg_pin(&gpio->k2, i, 0x2);
-			/* GPK2[0:6] pull disable */
-			s5p_gpio_set_pull(&gpio->k2, i, GPIO_PULL_NONE);
-			/* GPK2[0:6] drv 4x */
-			s5p_gpio_set_drv(&gpio->k2, i, GPIO_DRV_4X);
-		}
-		err = s5p_mmc_init(2, 4);
+		err = exynos_pinmux_config(PERIPH_ID_SDMMC2, PINMUX_FLAG_NONE);
+		if (err)
+			debug("SDMMC2 not configured\n");
+		else
+			err = s5p_mmc_init(2, 4);
 	}
 
 	return err;
@@ -629,6 +577,10 @@ static void board_power_init(void)
 	writel(0, (unsigned int)&pwr->lcd1_configuration);
 	writel(0, (unsigned int)&pwr->gps_configuration);
 	writel(0, (unsigned int)&pwr->gps_alive_configuration);
+
+	/* It is necessary to power down core 1 */
+	/* to successfully boot CPU1 in kernel */
+	writel(0, (unsigned int)&pwr->arm_core1_configuration);
 }
 
 static void board_uart_init(void)
@@ -668,7 +620,7 @@ int board_early_init_f(void)
 	return 0;
 }
 
-static void lcd_reset(void)
+void exynos_reset_lcd(void)
 {
 	struct exynos4_gpio_part2 *gpio2 =
 		(struct exynos4_gpio_part2 *)samsung_get_base_gpio_part2();
@@ -788,10 +740,6 @@ vidinfo_t panel_info = {
 	.vl_cmd_allow_len = 0xf,
 
 	.win_id		= 3,
-	.cfg_gpio	= NULL,
-	.backlight_on	= NULL,
-	.lcd_power_on	= NULL,	/* lcd_power_on in mipi dsi driver */
-	.reset_lcd	= lcd_reset,
 	.dual_lcd_enabled = 0,
 
 	.init_delay	= 0,
@@ -810,9 +758,7 @@ void init_panel_info(vidinfo_t *vid)
 #ifdef CONFIG_TIZEN
 	get_tizen_logo_info(vid);
 #endif
-
-	if (hwrevision(2))
-		mipi_lcd_device.reverse_panel = 1;
+	mipi_lcd_device.reverse_panel = 1;
 
 	strcpy(s6e8ax0_platform_data.lcd_panel_name, mipi_lcd_device.name);
 	s6e8ax0_platform_data.lcd_power = lcd_power;
@@ -825,3 +771,65 @@ void init_panel_info(vidinfo_t *vid)
 
 	setenv("lcdinfo", "lcd=s6e8ax0");
 }
+
+#ifdef CONFIG_USB_GADGET_MASS_STORAGE
+static int ums_read_sector(struct ums_device *ums_dev,
+			   ulong start, lbaint_t blkcnt, void *buf)
+{
+	if (ums_dev->mmc->block_dev.block_read(ums_dev->dev_num,
+			start + ums_dev->offset, blkcnt, buf) != blkcnt)
+		return -1;
+
+	return 0;
+}
+
+static int ums_write_sector(struct ums_device *ums_dev,
+			    ulong start, lbaint_t blkcnt, const void *buf)
+{
+	if (ums_dev->mmc->block_dev.block_write(ums_dev->dev_num,
+			start + ums_dev->offset, blkcnt, buf) != blkcnt)
+		return -1;
+
+	return 0;
+}
+
+static void ums_get_capacity(struct ums_device *ums_dev,
+			     long long int *capacity)
+{
+	long long int tmp_capacity;
+
+	tmp_capacity = (long long int) ((ums_dev->offset + ums_dev->part_size)
+					* SECTOR_SIZE);
+	*capacity = ums_dev->mmc->capacity - tmp_capacity;
+}
+
+static struct ums_board_info ums_board = {
+	.read_sector = ums_read_sector,
+	.write_sector = ums_write_sector,
+	.get_capacity = ums_get_capacity,
+	.name = "TRATS UMS disk",
+	.ums_dev = {
+		.mmc = NULL,
+		.dev_num = 0,
+		.offset = 0,
+		.part_size = 0.
+	},
+};
+
+struct ums_board_info *board_ums_init(unsigned int dev_num, unsigned int offset,
+				      unsigned int part_size)
+{
+	struct mmc *mmc;
+
+	mmc = find_mmc_device(dev_num);
+	if (!mmc)
+		return NULL;
+
+	ums_board.ums_dev.mmc = mmc;
+	ums_board.ums_dev.dev_num = dev_num;
+	ums_board.ums_dev.offset = offset;
+	ums_board.ums_dev.part_size = part_size;
+
+	return &ums_board;
+}
+#endif

@@ -3,20 +3,7 @@
  *
  * Copyright (C) 2009-2010 Marek Vasut <marek.vasut@gmail.com>
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
- * MA 02111-1307 USA
+ * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #ifndef	__CONFIG_H
@@ -29,6 +16,9 @@
  */
 #define	CONFIG_CPU_PXA25X			1	/* Intel PXA255 CPU */
 #define	CONFIG_PALMTC			1	/* Palm Tungsten|C board */
+
+/* we will never enable dcache, because we have to setup MMU first */
+#define CONFIG_SYS_DCACHE_OFF
 
 /*
  * Environment settings
@@ -71,6 +61,7 @@
 #define	CONFIG_CMD_ENV
 #define	CONFIG_CMD_MMC
 #define	CONFIG_LCD
+#define	CONFIG_PXA_LCD
 
 /*
  * MMC Card Configuration

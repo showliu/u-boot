@@ -4,19 +4,7 @@
  *
  * Copyright (C) 2009 TechNexion Ltd.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc.
+ * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #include <common.h>
@@ -31,7 +19,7 @@
 #include <asm/omap_gpio.h>
 #include <asm/arch/mmc_host_def.h>
 #include <asm/arch/dss.h>
-#include <asm/arch/clocks.h>
+#include <asm/arch/clock.h>
 #include <i2c.h>
 #include <spartan3.h>
 #include <asm/gpio.h>
@@ -73,14 +61,15 @@ static struct {
 
 static struct panel_config lcd_cfg[] = {
 	{
-	.timing_h       = PANEL_TIMING_H(4, 8, 41),
-	.timing_v       = PANEL_TIMING_V(2, 4, 10),
-	.pol_freq       = 0x00000000, /* Pol Freq */
-	.divisor        = 0x0001000d, /* 33Mhz Pixel Clock */
+	.timing_h       = PANEL_TIMING_H(40, 5, 2),
+	.timing_v       = PANEL_TIMING_V(8, 8, 2),
+	.pol_freq       = 0x00003000, /* Pol Freq */
+	.divisor        = 0x00010033, /* 9 Mhz Pixel Clock */
 	.panel_type     = 0x01, /* TFT */
 	.data_lines     = 0x03, /* 24 Bit RGB */
 	.load_mode      = 0x02, /* Frame Mode */
 	.panel_color	= 0,
+	.gfx_format	= GFXFORMAT_RGB24_UNPACKED,
 	},
 	{
 	.timing_h       = PANEL_TIMING_H(20, 192, 4),
@@ -91,6 +80,7 @@ static struct panel_config lcd_cfg[] = {
 	.data_lines     = 0x03, /* 24 Bit RGB */
 	.load_mode      = 0x02, /* Frame Mode */
 	.panel_color	= 0,
+	.gfx_format	= GFXFORMAT_RGB24_UNPACKED,
 	}
 };
 #endif
@@ -177,9 +167,9 @@ int fpga_post_config_fn(int cookie)
 {
 	debug("%s:%d: FPGA post-configuration\n", __func__, __LINE__);
 
-	fpga_reset(TRUE);
+	fpga_reset(true);
 	udelay(100);
-	fpga_reset(FALSE);
+	fpga_reset(false);
 
 	return 0;
 }
@@ -258,21 +248,26 @@ int board_init(void)
 	return 0;
 }
 
+#ifndef CONFIG_SPL_BUILD
 int misc_init_r(void)
 {
 	char *eth_addr;
+	struct tam3517_module_info info;
+	int ret;
 
+	TAM3517_READ_EEPROM(&info, ret);
 	dieid_num_r();
 
-	eth_addr = getenv("ethaddr");
-	if (eth_addr)
+	if (ret)
 		return 0;
+	eth_addr = getenv("ethaddr");
+	if (!eth_addr)
+		TAM3517_READ_MAC_FROM_EEPROM(&info);
 
-#ifndef CONFIG_SPL_BUILD
-	TAM3517_READ_MAC_FROM_EEPROM;
-#endif
+	TAM3517_PRINT_SOM_INFO(&info);
 	return 0;
 }
+#endif
 
 /*
  * Routine: set_muxconf_regs
@@ -299,7 +294,7 @@ int board_eth_init(bd_t *bis)
 	!defined(CONFIG_SPL_BUILD)
 int board_mmc_init(bd_t *bis)
 {
-	return omap_mmc_init(0, 0, 0);
+	return omap_mmc_init(0, 0, 0, -1, -1);
 }
 #endif
 

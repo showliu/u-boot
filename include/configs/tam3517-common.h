@@ -4,19 +4,7 @@
  *
  * Copyright (C) 2009 TechNexion Ltd.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc.
+ * SPDX-License-Identifier:	GPL-2.0+
  */
 
 #ifndef __TAM3517_H
@@ -28,6 +16,7 @@
 #define CONFIG_OMAP		/* in a TI OMAP core */
 #define CONFIG_OMAP34XX		/* which is a 34XX */
 #define CONFIG_OMAP_GPIO
+#define CONFIG_OMAP_COMMON
 
 #define CONFIG_SYS_TEXT_BASE 0x80008000
 
@@ -131,8 +120,6 @@
 #define CONFIG_HARD_I2C
 #define CONFIG_SYS_I2C_SPEED		400000
 #define CONFIG_SYS_I2C_SLAVE		1
-#define CONFIG_SYS_I2C_BUS		0
-#define CONFIG_SYS_I2C_BUS_SELECT	1
 #define CONFIG_SYS_I2C_EEPROM_ADDR	0x50		/* base address */
 #define CONFIG_SYS_I2C_EEPROM_ADDR_LEN	1		/* bytes of address */
 #define CONFIG_SYS_I2C_EEPROM_ADDR_OVERFLOW	0x07
@@ -189,7 +176,6 @@
  */
 #define CONFIG_NR_DRAM_BANKS	2	/* CS1 may or may not be populated */
 #define PHYS_SDRAM_1		OMAP34XX_SDRC_CS0
-#define PHYS_SDRAM_1_SIZE	(32 << 20)	/* at least 32 MiB */
 #define PHYS_SDRAM_2		OMAP34XX_SDRC_CS1
 
 /*
@@ -229,7 +215,6 @@
 #define CONFIG_DRIVER_TI_EMAC_USE_RMII
 #define CONFIG_MII
 #define CONFIG_EMAC_MDIO_PHY_NUM	0
-#define CONFIG_BOOTP_DEFAULT
 #define CONFIG_BOOTP_DNS
 #define CONFIG_BOOTP_DNS2
 #define CONFIG_BOOTP_SEND_HOSTNAME
@@ -358,7 +343,6 @@
  * I2C EEPROM
  */
 #if !(defined(__KERNEL_STRICT_NAMES) || defined(__ASSEMBLY__))
-
 /*
  * The I2C EEPROM on the TAM3517 contains
  * mac address and production data
@@ -384,24 +368,29 @@ struct tam3517_module_info {
 	unsigned char _rev[100];
 };
 
-#define TAM3517_READ_MAC_FROM_EEPROM	\
-do {					\
-	struct tam3517_module_info info;\
-	char buf[80], ethname[20];	\
-	int i;				\
+#define TAM3517_READ_EEPROM(info, ret) \
+do {								\
 	i2c_init(CONFIG_SYS_I2C_SPEED, CONFIG_SYS_I2C_SLAVE);	\
 	if (eeprom_read(CONFIG_SYS_I2C_EEPROM_ADDR, 0,		\
-			(void *)&info, sizeof(info)))		\
-		break;						\
+		(void *)info, sizeof(*info)))			\
+		ret = 1;					\
+	else							\
+		ret = 0;					\
+} while (0)
+
+#define TAM3517_READ_MAC_FROM_EEPROM(info)			\
+do {								\
+	char buf[80], ethname[20];				\
+	int i;							\
 	memset(buf, 0, sizeof(buf));				\
-	for (i = 0 ; i < ARRAY_SIZE(info.eth_addr); i++) {	\
+	for (i = 0 ; i < ARRAY_SIZE((info)->eth_addr); i++) {	\
 		sprintf(buf, "%02X:%02X:%02X:%02X:%02X:%02X",	\
-			info.eth_addr[i][5],			\
-			info.eth_addr[i][4],			\
-			info.eth_addr[i][3],			\
-			info.eth_addr[i][2],			\
-			info.eth_addr[i][1],			\
-			info.eth_addr[i][0]);			\
+			(info)->eth_addr[i][5],			\
+			(info)->eth_addr[i][4],			\
+			(info)->eth_addr[i][3],			\
+			(info)->eth_addr[i][2],			\
+			(info)->eth_addr[i][1],			\
+			(info)->eth_addr[i][0]);			\
 								\
 		if (i)						\
 			sprintf(ethname, "eth%daddr", i);	\
@@ -411,6 +400,30 @@ do {					\
 		setenv(ethname, buf);				\
 	}							\
 } while (0)
+
+/* The following macros are taken from Technexion's documentation */
+#define TAM3517_sequence_number(info) \
+	((info)->sequence_number % 0x1000000000000LL)
+#define TAM3517_week_of_year(info) (((info)->sequence_number >> 48) % 0x100)
+#define TAM3517_year(info) ((info)->sequence_number >> 56)
+#define TAM3517_revision_fixed(info) ((info)->revision % 0x100)
+#define TAM3517_revision_major(info) (((info)->revision >> 8) % 0x100)
+#define TAM3517_revision_tn(info) ((info)->revision >> 16)
+
+#define TAM3517_PRINT_SOM_INFO(info)				\
+do {								\
+	printf("Vendor:%s\n", (info)->customer);		\
+	printf("SOM:   %s\n", (info)->product);			\
+	printf("SeqNr: %02llu%02llu%012llu\n",			\
+		TAM3517_year(info),				\
+		TAM3517_week_of_year(info),			\
+		TAM3517_sequence_number(info));			\
+	printf("Rev:   TN%u %u.%u\n",				\
+		TAM3517_revision_tn(info),			\
+		TAM3517_revision_major(info),			\
+		TAM3517_revision_fixed(info));			\
+} while (0)
+
 #endif
 
 #endif /* __TAM3517_H */

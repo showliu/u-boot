@@ -5,23 +5,7 @@
  * (C) Copyright 2001 Sysgo Real-Time Solutions, GmbH <www.elinos.com>
  * Andreas Heppel <aheppel@sysgo.de>
  *
- * See file CREDITS for list of people who contributed to this
- * project.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of
- * the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston,
- * MA 02111-1307 USA
+ * SPDX-License-Identifier:	GPL-2.0+ 
  */
 
 #include <common.h>
@@ -40,7 +24,7 @@ DECLARE_GLOBAL_DATA_PTR;
 #include <env_default.h>
 
 struct hsearch_data env_htab = {
-	.apply = env_check_apply,
+	.change_ok = env_flags_validate,
 };
 
 static uchar __env_get_char_spec(int index)
@@ -81,13 +65,42 @@ const uchar *env_get_addr(int index)
 		return &default_environment[index];
 }
 
+/*
+ * Read an environment variable as a boolean
+ * Return -1 if variable does not exist (default to true)
+ */
+int getenv_yesno(const char *var)
+{
+	char *s = getenv(var);
+
+	if (s == NULL)
+		return -1;
+	return (*s == '1' || *s == 'y' || *s == 'Y' || *s == 't' || *s == 'T') ?
+		1 : 0;
+}
+
+/*
+ * Look up the variable from the default environment
+ */
+char *getenv_default(const char *name)
+{
+	char *ret_val;
+	unsigned long really_valid = gd->env_valid;
+	unsigned long real_gd_flags = gd->flags;
+
+	/* Pretend that the image is bad. */
+	gd->flags &= ~GD_FLG_ENV_READY;
+	gd->env_valid = 0;
+	ret_val = getenv(name);
+	gd->env_valid = really_valid;
+	gd->flags = real_gd_flags;
+	return ret_val;
+}
+
 void set_default_env(const char *s)
 {
-	/*
-	 * By default, do not apply changes as they will eventually
-	 * be applied by someone else
-	 */
-	int do_apply = 0;
+	int flags = 0;
+
 	if (sizeof(default_environment) > ENV_SIZE) {
 		puts("*** Error - default environment is too large\n\n");
 		return;
@@ -99,14 +112,7 @@ void set_default_env(const char *s)
 				"using default environment\n\n",
 				s + 1);
 		} else {
-			/*
-			 * This set_to_default was explicitly asked for
-			 * by the user, as opposed to being a recovery
-			 * mechanism.  Therefore we check every single
-			 * variable and apply changes to the system
-			 * right away (e.g. baudrate, console).
-			 */
-			do_apply = 1;
+			flags = H_INTERACTIVE;
 			puts(s);
 		}
 	} else {
@@ -114,8 +120,8 @@ void set_default_env(const char *s)
 	}
 
 	if (himport_r(&env_htab, (char *)default_environment,
-			sizeof(default_environment), '\0', 0,
-			0, NULL, do_apply) == 0)
+			sizeof(default_environment), '\0', flags,
+			0, NULL) == 0)
 		error("Environment import failed: errno = %d\n", errno);
 
 	gd->flags |= GD_FLG_ENV_READY;
@@ -130,11 +136,10 @@ int set_default_vars(int nvars, char * const vars[])
 	 * (and use \0 as a separator)
 	 */
 	return himport_r(&env_htab, (const char *)default_environment,
-				sizeof(default_environment), '\0', H_NOCLEAR,
-				nvars, vars, 1 /* do_apply */);
+				sizeof(default_environment), '\0',
+				H_NOCLEAR | H_INTERACTIVE, nvars, vars);
 }
 
-#ifndef CONFIG_SPL_BUILD
 /*
  * Check if CRC is valid and (if yes) import the environment.
  * Note that "buf" may or may not be aligned.
@@ -155,7 +160,7 @@ int env_import(const char *buf, int check)
 	}
 
 	if (himport_r(&env_htab, (char *)ep->data, ENV_SIZE, '\0', 0,
-			0, NULL, 0 /* do_apply */)) {
+			0, NULL)) {
 		gd->flags |= GD_FLG_ENV_READY;
 		return 1;
 	}
@@ -166,12 +171,12 @@ int env_import(const char *buf, int check)
 
 	return 0;
 }
-#endif
 
 void env_relocate(void)
 {
 #if defined(CONFIG_NEEDS_MANUAL_RELOC)
 	env_reloc();
+	env_htab.change_ok += gd->reloc_off;
 #endif
 	if (gd->env_valid == 0) {
 #if defined(CONFIG_ENV_IS_NOWHERE) || defined(CONFIG_SPL_BUILD)
